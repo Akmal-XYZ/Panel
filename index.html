@@ -1,90 +1,62 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Panel Project</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<title>PROJECT PANEL PRO</title>
 
 <style>
 body {
   margin:0;
-  font-family:'Inter',sans-serif;
-  background:#0b0b0b;
-  color:#fff;
+  font-family: 'Inter', sans-serif;
+  background: radial-gradient(circle at top, #111, #050505);
+  color:white;
 }
 
-/* HEADER */
-.header {
+.container { padding:15px; }
+
+/* PROJECT CARD */
+.project {
+  background: rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(10px);
   padding:15px;
-  background:#111;
+  border-radius:14px;
+  margin-bottom:10px;
   display:flex;
-  gap:10px;
-}
-
-.header input {
-  flex:1;
-  padding:10px;
-  border-radius:10px;
-  border:none;
-  background:#1a1a1a;
-  color:#fff;
-}
-
-/* GRID */
-.grid {
-  padding:15px;
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
-  gap:15px;
-}
-
-/* CARD */
-.card {
-  background:#151515;
-  border-radius:16px;
-  padding:15px;
+  justify-content:space-between;
   cursor:pointer;
-  transition:.2s;
+  transition:0.3s;
 }
 
-.card:hover {
-  transform:scale(1.03);
-}
-
-.status {
-  margin-top:10px;
-  display:flex;
-  gap:5px;
-  flex-wrap:wrap;
-}
+.project:hover { transform:scale(1.02); }
 
 .status span {
-  font-size:11px;
-  background:#222;
+  margin-left:6px;
+  font-size:12px;
   padding:4px 6px;
   border-radius:6px;
+  background:#111;
 }
 
 /* OVERLAY */
 .overlay {
   position:fixed;
-  inset:0;
+  top:0; left:0;
+  width:100%; height:100%;
   background:#000;
   display:none;
   flex-direction:column;
 }
-
 .overlay.active { display:flex; }
 
-.topbar {
+.overlay-header {
   padding:15px;
   background:#111;
   display:flex;
   justify-content:space-between;
 }
 
+/* GALLERY */
 .gallery {
   display:grid;
   grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
@@ -100,232 +72,207 @@ img {
   border-radius:10px;
 }
 
-textarea, input, button {
+/* INPUT */
+textarea {
   width:100%;
-  margin-top:8px;
-  padding:10px;
-  border-radius:8px;
+  height:80px;
   border:none;
+  border-radius:10px;
+  padding:10px;
+  background:#111;
+  color:white;
 }
 
-textarea, input {
-  background:#1a1a1a;
-  color:#fff;
-}
+audio { width:100%; margin-top:10px; }
 
 button {
-  background:#fff;
-  color:#000;
-  font-weight:600;
-}
-
-audio {
-  width:100%;
-  margin-top:10px;
+  margin-top:8px;
+  padding:10px;
+  border:none;
+  border-radius:10px;
+  background:#111;
+  color:white;
+  cursor:pointer;
 }
 </style>
 </head>
 
 <body>
 
-<div class="header">
-  <input type="text" id="search" placeholder="Search user..." oninput="render()">
-</div>
-
-<div class="grid" id="grid"></div>
+<div class="container" id="projects">Loading...</div>
 
 <div class="overlay" id="overlay">
-  <div class="topbar">
+  <div class="overlay-header">
     <span id="title"></span>
     <button onclick="closeOverlay()">Close</button>
   </div>
 
+  <!-- NOTE -->
   <div style="padding:10px">
-    <textarea id="noteInput"></textarea>
-    <button onclick="uploadNote()">Save Note</button>
-    <div id="noteView"></div>
+    <textarea id="noteInput" placeholder="Tulis note..."></textarea>
+    <button onclick="uploadNote()">Upload Note</button>
   </div>
 
+  <!-- AUDIO -->
   <div style="padding:10px">
-    <input type="file" id="audioInput">
+    <input type="file" id="audioInput" accept="audio/*">
     <audio id="audioPlayer" controls></audio>
     <button onclick="uploadAudio()">Upload Audio</button>
   </div>
 
-  <div style="padding:10px">
-    <input type="file" id="imageInput">
-    <button onclick="uploadImage()">Upload Image</button>
-  </div>
-
+  <!-- GALLERY -->
   <div class="gallery" id="gallery"></div>
 </div>
 
 <script>
-let allData = [];
-let grouped = {};
-let visibleUsers = [];
+const CLOUD_NAME = "dzbpzdqao";
+const PRESET = "akmal_pending_9x7";
+
+let dataGlobal = [];
 let currentUser = "";
-let page = 0;
-const limit = 10;
 
-// ================= FETCH =================
-async function loadData() {
-  const res = await fetch("/api/backend");
-  const data = await res.json();
-
-  allData = data;
-
-  grouped = {};
-
-  data.forEach(item => {
-    const user = item.user;
-
-    if (!grouped[user]) {
-      grouped[user] = {
-        images: [],
-        audio: null,
-        note: null
-      };
-    }
-
-    if (item.type === "image") grouped[user].images.push(item);
-    if (item.type === "audio") grouped[user].audio = item;
-    if (item.type === "note") grouped[user].note = item;
-  });
-
-  visibleUsers = Object.keys(grouped);
-  render(true);
+/* RANDOM TIME FORMAT */
+function getRandomTime() {
+  const h = Math.floor(Math.random()*24);
+  const m = Math.floor(Math.random()*60);
+  return `${String(h).padStart(2,'0')}-${String(m).padStart(2,'0')}`;
 }
 
-// ================= RENDER =================
-function render(reset=false) {
-  const grid = document.getElementById("grid");
-  const search = document.getElementById("search").value.toLowerCase();
+/* EXTRACT USER */
+function extractUser(name){
+  const match = name.match(/BY_(@[A-Z0-9_]+)/);
+  return match ? match[1] : null;
+}
 
-  if (reset) {
-    grid.innerHTML = "";
-    page = 0;
+/* LOAD DATA */
+async function load(){
+  try{
+    const res = await fetch("/api/backend");
+    const json = await res.json();
+
+    dataGlobal = json.resources || [];
+
+    const grouped = {};
+
+    dataGlobal.forEach(f=>{
+      const user = extractUser(f.public_id);
+      if(!user) return;
+
+      if(!grouped[user]) grouped[user]={
+        images:[],
+        audio:null,
+        note:null
+      };
+
+      if(f.format === "mp3") grouped[user].audio = f;
+      else if(f.format === "txt") grouped[user].note = f;
+      else grouped[user].images.push(f);
+    });
+
+    render(grouped);
+
+  }catch(e){
+    document.getElementById("projects").innerText="ERROR LOAD";
   }
+}
 
-  const filtered = visibleUsers.filter(u => u.includes(search));
+/* RENDER */
+function render(grouped){
+  const container = document.getElementById("projects");
+  container.innerHTML="";
 
-  const slice = filtered.slice(page * limit, (page+1)*limit);
-
-  slice.forEach(user => {
-    const p = grouped[user];
+  Object.keys(grouped).forEach(user=>{
+    const g = grouped[user];
 
     const div = document.createElement("div");
-    div.className = "card";
+    div.className="project";
 
-    div.innerHTML = `
-      <strong>${user}</strong>
+    div.innerHTML=`
+      <span>${user}</span>
       <div class="status">
-        <span>📝 ${p.note ? "✅":"❌"}</span>
-        <span>🎧 ${p.audio ? "✅":"❌"}</span>
-        <span>🖼️ ${p.images.length ? "✅":"❌"}</span>
+        <span>📝 ${g.note ? "✅":"❌"}</span>
+        <span>🎧 ${g.audio ? "✅":"❌"}</span>
+        <span>🖼️ ${g.images.length>0 ? "✅":"❌"}</span>
       </div>
     `;
 
-    div.onclick = () => openProject(user, p);
-    grid.appendChild(div);
+    div.onclick=()=>openProject(user,g);
+
+    container.appendChild(div);
   });
 }
 
-// ================= SCROLL =================
-window.addEventListener("scroll", () => {
-  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 50) {
-    page++;
-    render();
-  }
-});
-
-// ================= OPEN =================
-function openProject(user, data) {
+/* OPEN */
+function openProject(user,g){
   currentUser = user;
-
   title.innerText = user;
-  gallery.innerHTML = "";
 
-  data.images.forEach(img => {
-    const el = document.createElement("img");
-    el.src = img.url;
+  gallery.innerHTML="";
+
+  g.images.forEach(img=>{
+    const el=document.createElement("img");
+    el.src = img.secure_url;
     gallery.appendChild(el);
   });
 
-  noteView.innerText = data.note?.text || "";
-
-  if (data.audio) {
-    audioPlayer.src = data.audio.url;
+  // audio
+  if(g.audio){
+    audioPlayer.src = g.audio.secure_url;
+  } else {
+    audioPlayer.src="";
   }
 
   overlay.classList.add("active");
 }
 
-// ================= NOTE =================
-async function uploadNote() {
-  const text = noteInput.value;
-
-  await fetch("/api/backend", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({
-      type:"note",
-      user: currentUser,
-      text
-    })
-  });
-
-  loadData();
-}
-
-// ================= AUDIO =================
-async function uploadAudio() {
+/* UPLOAD AUDIO */
+async function uploadAudio(){
   const file = audioInput.files[0];
-  if (!file) return;
+  if(!file) return alert("Pilih audio");
 
-  audioPlayer.src = URL.createObjectURL(file);
+  const name = `PROJECT_PENDING_${getRandomTime()}_BY_${currentUser.toUpperCase()}`;
 
-  const fd = new FormData();
-  fd.append("type","audio");
-  fd.append("user",currentUser);
-  fd.append("file",file);
+  const form = new FormData();
+  form.append("file", file);
+  form.append("upload_preset", PRESET);
+  form.append("public_id", name);
 
-  const res = await fetch("/api/backend", {
+  await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`,{
     method:"POST",
-    body:fd
+    body:form
   });
 
-  const data = await res.json();
-  audioPlayer.src = data.url;
-
-  loadData();
+  alert("Audio uploaded");
+  load();
 }
 
-// ================= IMAGE =================
-async function uploadImage() {
-  const file = imageInput.files[0];
-  if (!file) return;
+/* UPLOAD NOTE */
+async function uploadNote(){
+  const text = noteInput.value;
+  if(!text) return;
 
-  const fd = new FormData();
-  fd.append("type","image");
-  fd.append("user",currentUser);
-  fd.append("file",file);
+  const name = `PROJECT_PENDING_${getRandomTime()}_BY_${currentUser.toUpperCase()}`;
 
-  await fetch("/api/backend", {
+  const form = new FormData();
+  form.append("file", new Blob([text],{type:"text/plain"}));
+  form.append("upload_preset", PRESET);
+  form.append("public_id", name);
+
+  await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/raw/upload`,{
     method:"POST",
-    body:fd
+    body:form
   });
 
-  loadData();
+  alert("Note uploaded");
+  load();
 }
 
-// ================= CLOSE =================
-function closeOverlay() {
+/* CLOSE */
+function closeOverlay(){
   overlay.classList.remove("active");
 }
 
-// init
-loadData();
+load();
 </script>
 
 </body>
