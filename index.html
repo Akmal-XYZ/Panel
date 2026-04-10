@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Panel</title>
+
+<style>
+body {
+  margin:0;
+  background:#0d0d0d;
+  font-family:sans-serif;
+  color:#fff;
+}
+
+.container {
+  padding:15px;
+}
+
+.project {
+  background:#151515;
+  padding:15px;
+  border-radius:14px;
+  margin-bottom:10px;
+  display:flex;
+  justify-content:space-between;
+  cursor:pointer;
+}
+
+.status span {
+  margin-left:6px;
+  font-size:12px;
+  padding:4px 6px;
+  border-radius:6px;
+  background:#222;
+}
+
+.overlay {
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:#000;
+  display:none;
+  flex-direction:column;
+}
+
+.overlay.active {
+  display:flex;
+}
+
+.overlay-header {
+  padding:15px;
+  background:#111;
+  display:flex;
+  justify-content:space-between;
+}
+
+.gallery {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+  gap:10px;
+  padding:10px;
+  overflow:auto;
+}
+
+img {
+  width:100%;
+  height:120px;
+  object-fit:cover;
+  border-radius:10px;
+}
+
+textarea, input, button {
+  width:100%;
+  margin-top:8px;
+  padding:10px;
+  border-radius:8px;
+  border:none;
+}
+
+textarea, input {
+  background:#1a1a1a;
+  color:#fff;
+}
+
+button {
+  background:#fff;
+  color:#000;
+  font-weight:600;
+  cursor:pointer;
+}
+
+audio {
+  width:100%;
+  margin-top:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container" id="projects">Loading...</div>
+
+<div class="overlay" id="overlay">
+  <div class="overlay-header">
+    <span id="title"></span>
+    <button onclick="closeOverlay()">Close</button>
+  </div>
+
+  <!-- NOTE -->
+  <div style="padding:10px">
+    <textarea id="noteInput" placeholder="Tulis note..."></textarea>
+    <button onclick="uploadNote()">Save Note</button>
+    <div id="noteView" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- AUDIO -->
+  <div style="padding:10px">
+    <input type="file" id="audioInput" accept="audio/*">
+    <audio id="audioPlayer" controls style="display:none;"></audio>
+    <button onclick="uploadAudio()">Upload Audio</button>
+  </div>
+
+  <!-- IMAGE -->
+  <div style="padding:10px">
+    <input type="file" id="imageInput" accept="image/*">
+    <button onclick="uploadImage()">Upload Image</button>
+  </div>
+
+  <div class="gallery" id="gallery"></div>
+</div>
+
+<script>
+let allData = [];
+let currentUser = "";
+
+// ================= LOAD =================
+async function loadData() {
+  const res = await fetch("/api/backend");
+  const data = await res.json();
+
+  allData = data;
+
+  const grouped = {};
+
+  data.forEach(item => {
+    const user = item.user;
+
+    if (!grouped[user]) {
+      grouped[user] = {
+        images: [],
+        audio: null,
+        note: null
+      };
+    }
+
+    if (item.type === "image") grouped[user].images.push(item);
+    if (item.type === "audio") grouped[user].audio = item;
+    if (item.type === "note") grouped[user].note = item;
+  });
+
+  const container = document.getElementById("projects");
+  container.innerHTML = "";
+
+  Object.keys(grouped).forEach(user => {
+    const p = grouped[user];
+
+    const div = document.createElement("div");
+    div.className = "project";
+
+    div.innerHTML = `
+      <span>${user}</span>
+      <div class="status">
+        <span>📝 ${p.note ? "✅" : "❌"}</span>
+        <span>🎧 ${p.audio ? "✅" : "❌"}</span>
+        <span>🖼️ ${p.images.length ? "✅" : "❌"}</span>
+      </div>
+    `;
+
+    div.onclick = () => openProject(user, p);
+    container.appendChild(div);
+  });
+}
+
+// ================= OPEN =================
+function openProject(user, data) {
+  currentUser = user;
+
+  title.innerText = user;
+  gallery.innerHTML = "";
+
+  // images
+  data.images.forEach(img => {
+    const el = document.createElement("img");
+    el.src = img.url;
+    gallery.appendChild(el);
+  });
+
+  // note
+  if (data.note) {
+    noteView.innerText = data.note.text;
+  } else {
+    noteView.innerText = "";
+  }
+
+  // audio
+  if (data.audio) {
+    audioPlayer.src = data.audio.url;
+    audioPlayer.style.display = "block";
+  } else {
+    audioPlayer.style.display = "none";
+  }
+
+  overlay.classList.add("active");
+}
+
+// ================= NOTE =================
+async function uploadNote() {
+  const text = noteInput.value;
+
+  await fetch("/api/backend", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      type:"note",
+      user: currentUser,
+      text
+    })
+  });
+
+  loadData();
+}
+
+// ================= AUDIO =================
+async function uploadAudio() {
+  const file = audioInput.files[0];
+  if (!file) return alert("Pilih audio");
+
+  const formData = new FormData();
+  formData.append("type", "audio");
+  formData.append("user", currentUser);
+  formData.append("file", file);
+
+  const res = await fetch("/api/backend", {
+    method:"POST",
+    body: formData
+  });
+
+  const data = await res.json();
+
+  audioPlayer.src = data.url;
+  audioPlayer.style.display = "block";
+
+  loadData();
+}
+
+// ================= IMAGE =================
+async function uploadImage() {
+  const file = imageInput.files[0];
+  if (!file) return alert("Pilih gambar");
+
+  const formData = new FormData();
+  formData.append("type", "image");
+  formData.append("user", currentUser);
+  formData.append("file", file);
+
+  await fetch("/api/backend", {
+    method:"POST",
+    body: formData
+  });
+
+  loadData();
+}
+
+// ================= CLOSE =================
+function closeOverlay() {
+  overlay.classList.remove("active");
+}
+
+// auto load
+loadData();
+setInterval(loadData, 5000);
+</script>
+
+</body>
+</html>
