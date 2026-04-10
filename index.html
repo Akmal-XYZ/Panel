@@ -131,55 +131,65 @@ audio {
 </div>
 
 <script>
-let allData = [];
 let currentUser = "";
 
 // ================= LOAD =================
 async function loadData() {
-  const res = await fetch("/api/backend");
-  const data = await res.json();
+  const container = document.getElementById("projects");
+  container.innerHTML = "Loading...";
 
-  allData = data;
+  try {
+    const res = await fetch("/api/backend");
+    const data = await res.json();
 
-  const grouped = {};
-
-  data.forEach(item => {
-    const user = item.user;
-
-    if (!grouped[user]) {
-      grouped[user] = {
-        images: [],
-        audio: null,
-        note: null
-      };
+    if (!data || data.length === 0) {
+      container.innerHTML = "Belum ada data";
+      return;
     }
 
-    if (item.type === "image") grouped[user].images.push(item);
-    if (item.type === "audio") grouped[user].audio = item;
-    if (item.type === "note") grouped[user].note = item;
-  });
+    const grouped = {};
 
-  const container = document.getElementById("projects");
-  container.innerHTML = "";
+    data.forEach(item => {
+      const user = item.user;
 
-  Object.keys(grouped).forEach(user => {
-    const p = grouped[user];
+      if (!grouped[user]) {
+        grouped[user] = {
+          images: [],
+          audio: null,
+          note: null
+        };
+      }
 
-    const div = document.createElement("div");
-    div.className = "project";
+      if (item.type === "image") grouped[user].images.push(item);
+      if (item.type === "audio") grouped[user].audio = item;
+      if (item.type === "note") grouped[user].note = item;
+    });
 
-    div.innerHTML = `
-      <span>${user}</span>
-      <div class="status">
-        <span>📝 ${p.note ? "✅" : "❌"}</span>
-        <span>🎧 ${p.audio ? "✅" : "❌"}</span>
-        <span>🖼️ ${p.images.length ? "✅" : "❌"}</span>
-      </div>
-    `;
+    container.innerHTML = "";
 
-    div.onclick = () => openProject(user, p);
-    container.appendChild(div);
-  });
+    Object.keys(grouped).forEach(user => {
+      const p = grouped[user];
+
+      const div = document.createElement("div");
+      div.className = "project";
+
+      div.innerHTML = `
+        <span>${user}</span>
+        <div class="status">
+          <span>📝 ${p.note ? "✅" : "❌"}</span>
+          <span>🎧 ${p.audio ? "✅" : "❌"}</span>
+          <span>🖼️ ${p.images.length ? "✅" : "❌"}</span>
+        </div>
+      `;
+
+      div.onclick = () => openProject(user, p);
+      container.appendChild(div);
+    });
+
+  } catch (err) {
+    container.innerHTML = "Error load data ❌";
+    console.error(err);
+  }
 }
 
 // ================= OPEN =================
@@ -213,10 +223,7 @@ function openProject(user, data) {
 // ================= NOTE =================
 async function uploadNote() {
   const text = noteInput.value;
-
-  const btn = event.target;
-  btn.innerText = "Saving...";
-  btn.disabled = true;
+  if (!text) return alert("Isi note dulu");
 
   await fetch("/api/backend", {
     method:"POST",
@@ -228,9 +235,7 @@ async function uploadNote() {
     })
   });
 
-  btn.innerText = "Save Note";
-  btn.disabled = false;
-
+  alert("Note saved");
   loadData();
 }
 
@@ -239,16 +244,12 @@ async function uploadAudio() {
   const file = audioInput.files[0];
   if (!file) return alert("Pilih audio");
 
-  // 🔥 limit biar ga freeze
+  // limit biar aman
   if (file.size > 5 * 1024 * 1024) {
-    return alert("Max 5MB bro 😅");
+    return alert("Max 5MB");
   }
 
-  const btn = event.target;
-  btn.innerText = "Uploading...";
-  btn.disabled = true;
-
-  // ⚡ preview instant
+  // preview dulu
   audioPlayer.src = URL.createObjectURL(file);
   audioPlayer.style.display = "block";
 
@@ -267,33 +268,18 @@ async function uploadAudio() {
 
     audioPlayer.src = data.url;
 
+    alert("Audio uploaded");
     loadData();
 
   } catch (err) {
     alert("Upload gagal");
   }
-
-  btn.innerText = "Upload Audio";
-  btn.disabled = false;
 }
 
 // ================= IMAGE =================
 async function uploadImage() {
   const file = imageInput.files[0];
   if (!file) return alert("Pilih gambar");
-
-  if (file.size > 5 * 1024 * 1024) {
-    return alert("Max 5MB bro 😅");
-  }
-
-  const btn = event.target;
-  btn.innerText = "Uploading...";
-  btn.disabled = true;
-
-  // ⚡ preview instant
-  const preview = document.createElement("img");
-  preview.src = URL.createObjectURL(file);
-  gallery.prepend(preview);
 
   const formData = new FormData();
   formData.append("type", "image");
@@ -305,9 +291,7 @@ async function uploadImage() {
     body: formData
   });
 
-  btn.innerText = "Upload Image";
-  btn.disabled = false;
-
+  alert("Image uploaded");
   loadData();
 }
 
@@ -318,8 +302,7 @@ function closeOverlay() {
 
 // auto load
 loadData();
-setInterval(loadData, 5000);
 </script>
-  
+
 </body>
 </html>
