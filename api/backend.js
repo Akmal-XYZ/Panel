@@ -6,8 +6,8 @@ export const config = {
 
 export default async function handler(req, res) {
   const cloudName = "dzbpzdqao";
-  const apiKey = "978144777229154";
-  const apiSecret = "kb5h-WryZaiBzR7g3qulAF45iTo";
+  const apiKey = "ISI_API_KEY_LU";
+  const apiSecret = "ISI_API_SECRET_LU";
 
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
 
@@ -18,25 +18,17 @@ export default async function handler(req, res) {
     // =========================
     if (req.method === "GET") {
 
-      // ambil image
+      const result = [];
+
+      // IMAGE
       const imgRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/resources/image?max_results=100`,
+        `https://api.cloudinary.com/v1_1/${cloudName}/resources/image?max_results=50`,
         { headers: { Authorization: `Basic ${auth}` } }
       );
       const imgData = await imgRes.json();
 
-      // ambil raw (note + audio)
-      const rawRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/resources/raw?max_results=100`,
-        { headers: { Authorization: `Basic ${auth}` } }
-      );
-      const rawData = await rawRes.json();
-
-      const result = [];
-
-      // IMAGE
       (imgData.resources || []).forEach(item => {
-        const match = item.public_id.match(/BY_(@[A-Za-z0-9_]+)/);
+        const match = item.public_id.match(/img_BY_(@[A-Za-z0-9_]+)/);
         if (!match) return;
 
         result.push({
@@ -46,38 +38,52 @@ export default async function handler(req, res) {
         });
       });
 
-      // RAW (NOTE + AUDIO)
-      (rawData.resources || []).forEach(item => {
+      // VIDEO (audio disini)
+      const vidRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/resources/video?max_results=50`,
+        { headers: { Authorization: `Basic ${auth}` } }
+      );
+      const vidData = await vidRes.json();
 
-        // NOTE
-        if (item.public_id.startsWith("note_BY_")) {
-          const user = item.public_id.replace("note_BY_", "");
+      (vidData.resources || []).forEach(item => {
+        if (!item.public_id.startsWith("audio_BY_")) return;
 
-          result.push({
-            type: "note",
-            user,
-            url: item.secure_url // nanti di fetch text di frontend (optional)
-          });
-        }
+        const user = item.public_id.replace("audio_BY_", "");
 
-        // AUDIO
-        if (item.public_id.startsWith("audio_BY_")) {
-          const user = item.public_id.replace("audio_BY_", "");
-
-          result.push({
-            type: "audio",
-            user,
-            url: item.secure_url
-          });
-        }
-
+        result.push({
+          type: "audio",
+          user,
+          url: item.secure_url
+        });
       });
+
+      // RAW (NOTE)
+      const rawRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/resources/raw?max_results=50`,
+        { headers: { Authorization: `Basic ${auth}` } }
+      );
+      const rawData = await rawRes.json();
+
+      for (const item of rawData.resources || []) {
+        if (!item.public_id.startsWith("note_BY_")) continue;
+
+        const user = item.public_id.replace("note_BY_", "");
+
+        // ambil isi note
+        const text = await fetch(item.secure_url).then(r => r.text());
+
+        result.push({
+          type: "note",
+          user,
+          text
+        });
+      }
 
       return res.status(200).json(result);
     }
 
     // =========================
-    // POST → upload
+    // POST → upload semua
     // =========================
     if (req.method === "POST") {
 
@@ -131,13 +137,13 @@ export default async function handler(req, res) {
       let uploadUrl = "";
       let public_id = "";
 
-      // AUDIO → RAW
+      // 🎧 AUDIO → VIDEO (FIX BESAR)
       if (type === "audio") {
         public_id = `audio_BY_${user}`;
-        uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`;
+        uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
       }
 
-      // IMAGE → IMAGE
+      // 🖼️ IMAGE
       if (type === "image") {
         public_id = `img_BY_${user}_${Date.now()}`;
         uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
