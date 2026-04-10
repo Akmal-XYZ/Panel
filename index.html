@@ -3,52 +3,82 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Project Panel</title>
+<title>Panel Project</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 
 <style>
 body {
   margin:0;
-  background:#0d0d0d;
-  font-family:sans-serif;
+  font-family:'Inter',sans-serif;
+  background:#0b0b0b;
   color:#fff;
 }
 
-.container {
+/* HEADER */
+.header {
   padding:15px;
+  background:#111;
+  display:flex;
+  gap:10px;
 }
 
-.project {
-  background:#151515;
+.header input {
+  flex:1;
+  padding:10px;
+  border-radius:10px;
+  border:none;
+  background:#1a1a1a;
+  color:#fff;
+}
+
+/* GRID */
+.grid {
   padding:15px;
-  border-radius:14px;
-  margin-bottom:10px;
-  display:flex;
-  justify-content:space-between;
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:15px;
+}
+
+/* CARD */
+.card {
+  background:#151515;
+  border-radius:16px;
+  padding:15px;
   cursor:pointer;
+  transition:.2s;
+}
+
+.card:hover {
+  transform:scale(1.03);
+}
+
+.status {
+  margin-top:10px;
+  display:flex;
+  gap:5px;
+  flex-wrap:wrap;
 }
 
 .status span {
-  margin-left:6px;
-  font-size:12px;
+  font-size:11px;
+  background:#222;
   padding:4px 6px;
   border-radius:6px;
-  background:#222;
 }
 
+/* OVERLAY */
 .overlay {
   position:fixed;
-  top:0; left:0;
-  width:100%; height:100%;
+  inset:0;
   background:#000;
   display:none;
   flex-direction:column;
 }
 
-.overlay.active {
-  display:flex;
-}
+.overlay.active { display:flex; }
 
-.overlay-header {
+.topbar {
   padding:15px;
   background:#111;
   display:flex;
@@ -87,7 +117,6 @@ button {
   background:#fff;
   color:#000;
   font-weight:600;
-  cursor:pointer;
 }
 
 audio {
@@ -99,31 +128,32 @@ audio {
 
 <body>
 
-<div class="container" id="projects">Loading...</div>
+<div class="header">
+  <input type="text" id="search" placeholder="Search user..." oninput="render()">
+</div>
+
+<div class="grid" id="grid"></div>
 
 <div class="overlay" id="overlay">
-  <div class="overlay-header">
+  <div class="topbar">
     <span id="title"></span>
     <button onclick="closeOverlay()">Close</button>
   </div>
 
-  <!-- NOTE -->
   <div style="padding:10px">
-    <textarea id="noteInput" placeholder="Tulis note..."></textarea>
+    <textarea id="noteInput"></textarea>
     <button onclick="uploadNote()">Save Note</button>
-    <div id="noteView" style="margin-top:10px;"></div>
+    <div id="noteView"></div>
   </div>
 
-  <!-- AUDIO -->
   <div style="padding:10px">
-    <input type="file" id="audioInput" accept="audio/*">
-    <audio id="audioPlayer" controls style="display:none;"></audio>
+    <input type="file" id="audioInput">
+    <audio id="audioPlayer" controls></audio>
     <button onclick="uploadAudio()">Upload Audio</button>
   </div>
 
-  <!-- IMAGE -->
   <div style="padding:10px">
-    <input type="file" id="imageInput" accept="image/*">
+    <input type="file" id="imageInput">
     <button onclick="uploadImage()">Upload Image</button>
   </div>
 
@@ -131,66 +161,83 @@ audio {
 </div>
 
 <script>
+let allData = [];
+let grouped = {};
+let visibleUsers = [];
 let currentUser = "";
+let page = 0;
+const limit = 10;
 
-// ================= LOAD =================
+// ================= FETCH =================
 async function loadData() {
-  const container = document.getElementById("projects");
-  container.innerHTML = "Loading...";
+  const res = await fetch("/api/backend");
+  const data = await res.json();
 
-  try {
-    const res = await fetch("/api/backend");
-    const data = await res.json();
+  allData = data;
 
-    if (!data || data.length === 0) {
-      container.innerHTML = "Belum ada data";
-      return;
+  grouped = {};
+
+  data.forEach(item => {
+    const user = item.user;
+
+    if (!grouped[user]) {
+      grouped[user] = {
+        images: [],
+        audio: null,
+        note: null
+      };
     }
 
-    const grouped = {};
+    if (item.type === "image") grouped[user].images.push(item);
+    if (item.type === "audio") grouped[user].audio = item;
+    if (item.type === "note") grouped[user].note = item;
+  });
 
-    data.forEach(item => {
-      const user = item.user;
-
-      if (!grouped[user]) {
-        grouped[user] = {
-          images: [],
-          audio: null,
-          note: null
-        };
-      }
-
-      if (item.type === "image") grouped[user].images.push(item);
-      if (item.type === "audio") grouped[user].audio = item;
-      if (item.type === "note") grouped[user].note = item;
-    });
-
-    container.innerHTML = "";
-
-    Object.keys(grouped).forEach(user => {
-      const p = grouped[user];
-
-      const div = document.createElement("div");
-      div.className = "project";
-
-      div.innerHTML = `
-        <span>${user}</span>
-        <div class="status">
-          <span>📝 ${p.note ? "✅" : "❌"}</span>
-          <span>🎧 ${p.audio ? "✅" : "❌"}</span>
-          <span>🖼️ ${p.images.length ? "✅" : "❌"}</span>
-        </div>
-      `;
-
-      div.onclick = () => openProject(user, p);
-      container.appendChild(div);
-    });
-
-  } catch (err) {
-    container.innerHTML = "Error load data ❌";
-    console.error(err);
-  }
+  visibleUsers = Object.keys(grouped);
+  render(true);
 }
+
+// ================= RENDER =================
+function render(reset=false) {
+  const grid = document.getElementById("grid");
+  const search = document.getElementById("search").value.toLowerCase();
+
+  if (reset) {
+    grid.innerHTML = "";
+    page = 0;
+  }
+
+  const filtered = visibleUsers.filter(u => u.includes(search));
+
+  const slice = filtered.slice(page * limit, (page+1)*limit);
+
+  slice.forEach(user => {
+    const p = grouped[user];
+
+    const div = document.createElement("div");
+    div.className = "card";
+
+    div.innerHTML = `
+      <strong>${user}</strong>
+      <div class="status">
+        <span>📝 ${p.note ? "✅":"❌"}</span>
+        <span>🎧 ${p.audio ? "✅":"❌"}</span>
+        <span>🖼️ ${p.images.length ? "✅":"❌"}</span>
+      </div>
+    `;
+
+    div.onclick = () => openProject(user, p);
+    grid.appendChild(div);
+  });
+}
+
+// ================= SCROLL =================
+window.addEventListener("scroll", () => {
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 50) {
+    page++;
+    render();
+  }
+});
 
 // ================= OPEN =================
 function openProject(user, data) {
@@ -199,22 +246,16 @@ function openProject(user, data) {
   title.innerText = user;
   gallery.innerHTML = "";
 
-  // images
   data.images.forEach(img => {
     const el = document.createElement("img");
     el.src = img.url;
     gallery.appendChild(el);
   });
 
-  // note
   noteView.innerText = data.note?.text || "";
 
-  // audio
   if (data.audio) {
     audioPlayer.src = data.audio.url;
-    audioPlayer.style.display = "block";
-  } else {
-    audioPlayer.style.display = "none";
   }
 
   overlay.classList.add("active");
@@ -223,7 +264,6 @@ function openProject(user, data) {
 // ================= NOTE =================
 async function uploadNote() {
   const text = noteInput.value;
-  if (!text) return alert("Isi note dulu");
 
   await fetch("/api/backend", {
     method:"POST",
@@ -235,63 +275,47 @@ async function uploadNote() {
     })
   });
 
-  alert("Note saved");
   loadData();
 }
 
 // ================= AUDIO =================
 async function uploadAudio() {
   const file = audioInput.files[0];
-  if (!file) return alert("Pilih audio");
+  if (!file) return;
 
-  // limit biar aman
-  if (file.size > 5 * 1024 * 1024) {
-    return alert("Max 5MB");
-  }
-
-  // preview dulu
   audioPlayer.src = URL.createObjectURL(file);
-  audioPlayer.style.display = "block";
 
-  const formData = new FormData();
-  formData.append("type", "audio");
-  formData.append("user", currentUser);
-  formData.append("file", file);
+  const fd = new FormData();
+  fd.append("type","audio");
+  fd.append("user",currentUser);
+  fd.append("file",file);
 
-  try {
-    const res = await fetch("/api/backend", {
-      method:"POST",
-      body: formData
-    });
+  const res = await fetch("/api/backend", {
+    method:"POST",
+    body:fd
+  });
 
-    const data = await res.json();
+  const data = await res.json();
+  audioPlayer.src = data.url;
 
-    audioPlayer.src = data.url;
-
-    alert("Audio uploaded");
-    loadData();
-
-  } catch (err) {
-    alert("Upload gagal");
-  }
+  loadData();
 }
 
 // ================= IMAGE =================
 async function uploadImage() {
   const file = imageInput.files[0];
-  if (!file) return alert("Pilih gambar");
+  if (!file) return;
 
-  const formData = new FormData();
-  formData.append("type", "image");
-  formData.append("user", currentUser);
-  formData.append("file", file);
+  const fd = new FormData();
+  fd.append("type","image");
+  fd.append("user",currentUser);
+  fd.append("file",file);
 
   await fetch("/api/backend", {
     method:"POST",
-    body: formData
+    body:fd
   });
 
-  alert("Image uploaded");
   loadData();
 }
 
@@ -300,7 +324,7 @@ function closeOverlay() {
   overlay.classList.remove("active");
 }
 
-// auto load
+// init
 loadData();
 </script>
 
