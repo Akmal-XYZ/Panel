@@ -197,11 +197,7 @@ function openProject(user, data) {
   });
 
   // note
-  if (data.note) {
-    noteView.innerText = data.note.text;
-  } else {
-    noteView.innerText = "";
-  }
+  noteView.innerText = data.note?.text || "";
 
   // audio
   if (data.audio) {
@@ -218,6 +214,10 @@ function openProject(user, data) {
 async function uploadNote() {
   const text = noteInput.value;
 
+  const btn = event.target;
+  btn.innerText = "Saving...";
+  btn.disabled = true;
+
   await fetch("/api/backend", {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
@@ -228,6 +228,9 @@ async function uploadNote() {
     })
   });
 
+  btn.innerText = "Save Note";
+  btn.disabled = false;
+
   loadData();
 }
 
@@ -236,28 +239,61 @@ async function uploadAudio() {
   const file = audioInput.files[0];
   if (!file) return alert("Pilih audio");
 
+  // 🔥 limit biar ga freeze
+  if (file.size > 5 * 1024 * 1024) {
+    return alert("Max 5MB bro 😅");
+  }
+
+  const btn = event.target;
+  btn.innerText = "Uploading...";
+  btn.disabled = true;
+
+  // ⚡ preview instant
+  audioPlayer.src = URL.createObjectURL(file);
+  audioPlayer.style.display = "block";
+
   const formData = new FormData();
   formData.append("type", "audio");
   formData.append("user", currentUser);
   formData.append("file", file);
 
-  const res = await fetch("/api/backend", {
-    method:"POST",
-    body: formData
-  });
+  try {
+    const res = await fetch("/api/backend", {
+      method:"POST",
+      body: formData
+    });
 
-  const data = await res.json();
+    const data = await res.json();
 
-  audioPlayer.src = data.url;
-  audioPlayer.style.display = "block";
+    audioPlayer.src = data.url;
 
-  loadData();
+    loadData();
+
+  } catch (err) {
+    alert("Upload gagal");
+  }
+
+  btn.innerText = "Upload Audio";
+  btn.disabled = false;
 }
 
 // ================= IMAGE =================
 async function uploadImage() {
   const file = imageInput.files[0];
   if (!file) return alert("Pilih gambar");
+
+  if (file.size > 5 * 1024 * 1024) {
+    return alert("Max 5MB bro 😅");
+  }
+
+  const btn = event.target;
+  btn.innerText = "Uploading...";
+  btn.disabled = true;
+
+  // ⚡ preview instant
+  const preview = document.createElement("img");
+  preview.src = URL.createObjectURL(file);
+  gallery.prepend(preview);
 
   const formData = new FormData();
   formData.append("type", "image");
@@ -268,6 +304,9 @@ async function uploadImage() {
     method:"POST",
     body: formData
   });
+
+  btn.innerText = "Upload Image";
+  btn.disabled = false;
 
   loadData();
 }
@@ -281,6 +320,6 @@ function closeOverlay() {
 loadData();
 setInterval(loadData, 5000);
 </script>
-
+  
 </body>
 </html>
