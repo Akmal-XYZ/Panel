@@ -5,6 +5,8 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+
+  // 🔥 WAJIB ISI
   const cloudName = "dzbpzdqao";
   const apiKey = "ISI_API_KEY_LU";
   const apiSecret = "ISI_API_SECRET_LU";
@@ -14,38 +16,37 @@ export default async function handler(req, res) {
   try {
 
     // =========================
-    // GET → ambil semua data
+    // GET DATA
     // =========================
     if (req.method === "GET") {
 
-      const result = [];
+      let result = [];
 
       // IMAGE
-      const imgRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/resources/image?max_results=50`,
+      const img = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/resources/image`,
         { headers: { Authorization: `Basic ${auth}` } }
-      );
-      const imgData = await imgRes.json();
+      ).then(r => r.json());
 
-      (imgData.resources || []).forEach(item => {
-        const match = item.public_id.match(/img_BY_(@[A-Za-z0-9_]+)/);
-        if (!match) return;
+      (img.resources || []).forEach(item => {
+        if (!item.public_id.startsWith("img_BY_")) return;
+
+        const user = item.public_id.split("_")[2];
 
         result.push({
           type: "image",
-          user: match[1].toLowerCase(),
+          user,
           url: item.secure_url
         });
       });
 
-      // VIDEO (audio disini)
-      const vidRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/resources/video?max_results=50`,
+      // AUDIO (pakai VIDEO biar stabil)
+      const vid = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/resources/video`,
         { headers: { Authorization: `Basic ${auth}` } }
-      );
-      const vidData = await vidRes.json();
+      ).then(r => r.json());
 
-      (vidData.resources || []).forEach(item => {
+      (vid.resources || []).forEach(item => {
         if (!item.public_id.startsWith("audio_BY_")) return;
 
         const user = item.public_id.replace("audio_BY_", "");
@@ -57,20 +58,21 @@ export default async function handler(req, res) {
         });
       });
 
-      // RAW (NOTE)
-      const rawRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/resources/raw?max_results=50`,
+      // NOTE (RAW)
+      const raw = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/resources/raw`,
         { headers: { Authorization: `Basic ${auth}` } }
-      );
-      const rawData = await rawRes.json();
+      ).then(r => r.json());
 
-      for (const item of rawData.resources || []) {
+      for (const item of raw.resources || []) {
         if (!item.public_id.startsWith("note_BY_")) continue;
 
         const user = item.public_id.replace("note_BY_", "");
 
-        // ambil isi note
-        const text = await fetch(item.secure_url).then(r => r.text());
+        let text = "";
+        try {
+          text = await fetch(item.secure_url).then(r => r.text());
+        } catch {}
 
         result.push({
           type: "note",
@@ -83,7 +85,7 @@ export default async function handler(req, res) {
     }
 
     // =========================
-    // POST → upload semua
+    // POST UPLOAD
     // =========================
     if (req.method === "POST") {
 
@@ -95,17 +97,15 @@ export default async function handler(req, res) {
 
         if (type === "note") {
 
-          const public_id = `note_BY_${user}`;
-
           const body = new URLSearchParams();
           body.append(
             "file",
             `data:text/plain;base64,${Buffer.from(text).toString("base64")}`
           );
-          body.append("public_id", public_id);
+          body.append("public_id", `note_BY_${user}`);
           body.append("overwrite", "true");
 
-          const response = await fetch(
+          const upload = await fetch(
             `https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`,
             {
               method: "POST",
@@ -115,10 +115,9 @@ export default async function handler(req, res) {
               },
               body,
             }
-          );
+          ).then(r => r.json());
 
-          const data = await response.json();
-          return res.status(200).json(data);
+          return res.status(200).json(upload);
         }
       }
 
@@ -134,19 +133,17 @@ export default async function handler(req, res) {
 
       const buffer = Buffer.from(await file.arrayBuffer());
 
-      let uploadUrl = "";
+      let url = "";
       let public_id = "";
 
-      // 🎧 AUDIO → VIDEO (FIX BESAR)
       if (type === "audio") {
         public_id = `audio_BY_${user}`;
-        uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
+        url = `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
       }
 
-      // 🖼️ IMAGE
       if (type === "image") {
         public_id = `img_BY_${user}_${Date.now()}`;
-        uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+        url = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
       }
 
       const body = new URLSearchParams();
@@ -157,29 +154,29 @@ export default async function handler(req, res) {
       body.append("public_id", public_id);
       body.append("overwrite", "true");
 
-      const response = await fetch(uploadUrl, {
+      const upload = await fetch(url, {
         method: "POST",
         headers: {
           Authorization: `Basic ${auth}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body,
-      });
+      }).then(r => r.json());
 
-      const data = await response.json();
-
-      if (data.error) {
-        return res.status(500).json(data);
+      if (upload.error) {
+        return res.status(500).json(upload);
       }
 
       return res.status(200).json({
-        url: data.secure_url
+        url: upload.secure_url
       });
     }
 
     return res.status(405).end();
 
   } catch (err) {
+    console.log("ERROR:", err);
+
     return res.status(500).json({
       error: "server error",
       message: err.message
