@@ -8,8 +8,8 @@ export default async function handler(req, res) {
 
   // 🔥 WAJIB ISI
   const cloudName = "dzbpzdqao";
-  const apiKey = "ISI_API_KEY_LU";
-  const apiSecret = "ISI_API_SECRET_LU";
+  const apiKey = "978144777229154";
+  const apiSecret = "kb5h-WryZaiBzR7g3qulAF45iTo";
 
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
 
